@@ -35,7 +35,7 @@ class AttentionBase(nn.Module):
         self.q_proj = nn.Linear(embed_count, embed_count, bias=False)
         self.out_proj = nn.Linear(embed_count, embed_count, bias=False)
         self.one = torch.ones((1, 1))
-        if torch.cuda.is_available(): self.one = self.one.cuda()
+        # if torch.cuda.is_available(): self.one = self.one.cuda()
     
     def forward(
         self,
@@ -47,7 +47,7 @@ class AttentionBase(nn.Module):
         keys = keys.reshape(keys.shape[:2] + (self.head_count, -1))
         values = values.reshape(values.shape[:2] + (self.head_count, -1))
         queries = queries.reshape(queries.shape[:2] + (self.head_count, -1))
-        queries /= queries.shape[-1] ** 0.5
+        queries /= float(queries.shape[-1] ** 0.5)
 
         attention_bias = torch.where(
             attention_mask,
@@ -99,7 +99,7 @@ class EncoderLayer(nn.Module):
     ) -> FloatTensor:
         residual = encoder_state
         encoder_state = self.pre_self_attn_layer_norm.forward(encoder_state)
-        encoder_state = self.self_attn.forward(encoder_state, attention_mask)
+        # encoder_state = self.self_attn.forward(encoder_state, attention_mask)
         encoder_state = self.self_attn_layer_norm.forward(encoder_state)
         encoder_state = residual + encoder_state
         residual = encoder_state
@@ -120,30 +120,67 @@ class DalleBartEncoder(nn.Module):
     ):
         super().__init__()
         self.embed_tokens = nn.Embedding(text_vocab_count, embed_count)
+        self.embed_tokens = torch.jit.trace(
+            self.embed_tokens,
+            torch.zeros((2, 64), dtype=torch.int64)
+        )
         self.embed_positions = nn.Embedding(text_token_count, embed_count)
+        self.embed_positions = torch.jit.trace(
+            self.embed_positions,
+            torch.zeros((2, 64), dtype=torch.int64)
+        )
         self.layers: List[EncoderLayer] = nn.ModuleList([
-            EncoderLayer(
-                embed_count = embed_count,
-                head_count = attention_head_count,
-                glu_embed_count = glu_embed_count
-            ) 
+            torch.jit.trace(
+                EncoderLayer(
+                    embed_count = embed_count,
+                    head_count = attention_head_count,
+                    glu_embed_count = glu_embed_count
+                ),
+                [
+                    torch.rand((2, 64, 1024), dtype=torch.float32),
+                    torch.zeros((2, 64), dtype=torch.bool)
+                ]
+            )
             for _ in range(layer_count)
         ])
         self.layernorm_embedding = nn.LayerNorm(embed_count)
+        self.layernorm_embedding = torch.jit.trace(
+            self.layernorm_embedding,
+            torch.rand((2, 64, 1024), dtype=torch.float32)
+        )
         self.final_ln = nn.LayerNorm(embed_count)
+        self.layernorm_embedding = torch.jit.trace(
+            self.layernorm_embedding,
+            torch.rand((2, 64, 1024), dtype=torch.float32)
+        )
         self.token_indices = torch.arange(text_token_count).to(torch.long)
-        if torch.cuda.is_available(): 
-            self.token_indices = self.token_indices.cuda()
+        # if torch.cuda.is_available(): 
+            # self.token_indices = self.token_indices.cuda()
+
+        self.pose_tokens = torch.tensor([
+            [
+                0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17,
+                18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
+                36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
+                54, 55, 56, 57, 58, 59, 60, 61, 62, 63
+            ],
+            [
+                0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17,
+                18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
+                36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
+                54, 55, 56, 57, 58, 59, 60, 61, 62, 63
+            ]
+         ], dtype=torch.int64)
 
     def forward(self, text_tokens: LongTensor) -> FloatTensor:
         attention_mask = text_tokens.not_equal(1)
-        pose_tokens = self.token_indices[None][[0] * text_tokens.shape[0]]
+        # pose_tokens = self.token_indices[None][[0] * text_tokens.shape[0]]
         encoder_state = (
             self.embed_tokens.forward(text_tokens) +
-            self.embed_positions.forward(pose_tokens)
+            self.embed_positions.forward(self.pose_tokens)
         )
         encoder_state = self.layernorm_embedding.forward(encoder_state)
-        for layer in self.layers:
+        for i, layer in enumerate(self.layers):
             encoder_state = layer.forward(encoder_state, attention_mask)
         encoder_state = self.final_ln.forward(encoder_state)
         return encoder_state
