@@ -170,7 +170,7 @@ class MinDalle:
         if self.is_verbose: print("sampling image tokens")
         if seed > 0: torch.manual_seed(seed)
         image_tokens = self.decoder.forward(
-            image_count,
+            # image_count,
             text_tokens, 
             encoder_state
         )

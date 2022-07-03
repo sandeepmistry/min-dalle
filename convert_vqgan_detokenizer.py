@@ -22,8 +22,8 @@ out = traced_model(image_tokens)
 model = ct.convert(
     traced_model,
     inputs=[
-    	ct.TensorType(name="image_tokens", shape=image_tokens.shape, dtype=np.int64)
-  	],
+        ct.TensorType(name="image_tokens", shape=image_tokens.shape, dtype=np.int64)
+    ],
     convert_to="mlprogram",
     compute_precision=ct.precision.FLOAT32
 )

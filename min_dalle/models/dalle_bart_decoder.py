@@ -125,19 +125,48 @@ class DalleBartDecoder(nn.Module):
         self.condition_factor = 10.0
         self.image_token_count = image_token_count
         self.embed_tokens = nn.Embedding(image_vocab_count + 1, embed_count)
+        self.embed_tokens = torch.jit.trace(
+            self.embed_tokens,
+            torch.zeros((2,), dtype=torch.int64)
+        )
         self.embed_positions = nn.Embedding(image_token_count, embed_count)
+        self.embed_positions = torch.jit.trace(
+            self.embed_positions,
+            torch.zeros((2,), dtype=torch.int64)
+        )
         self.layers: List[DecoderLayer] = nn.ModuleList([
-            DecoderLayer(
-                image_token_count,
-                attention_head_count,
-                embed_count,
-                glu_embed_count
-            ) 
+            torch.jit.trace(
+                DecoderLayer(
+                    image_token_count,
+                    attention_head_count,
+                    embed_count,
+                    glu_embed_count
+                ),
+                [
+                    torch.rand([2, 1, 1024], dtype=torch.float32),
+                    torch.rand([2, 64, 1024], dtype=torch.float32),
+                    torch.rand([4, 256, 1024], dtype=torch.float32),
+                    torch.zeros((2, 64), dtype=torch.bool),
+                    torch.zeros((1,), dtype=torch.int64)
+                ]
+            )
             for _ in range(layer_count)
         ])
         self.layernorm_embedding = nn.LayerNorm(embed_count)
+        self.layernorm_embedding = torch.jit.trace(
+            self.layernorm_embedding,
+            torch.rand([2, 1024], dtype=torch.float32)
+        )
         self.final_ln = nn.LayerNorm(embed_count)
+        self.final_ln = torch.jit.trace(
+            self.final_ln,
+            torch.rand([2, 1, 1024], dtype=torch.float32)
+        )
         self.lm_head = nn.Linear(embed_count, image_vocab_count + 1, bias=False)
+        self.lm_head = torch.jit.trace(
+            self.lm_head,
+            torch.rand([2, 1, 1024], dtype=torch.float32)
+        )
         self.zero_prob = torch.zeros([1])
         self.token_indices = torch.arange(self.sample_token_count)
         self.start_token = torch.tensor([start_token]).to(torch.long)
@@ -191,10 +220,11 @@ class DalleBartDecoder(nn.Module):
 
     def forward(
         self,
-        image_count: int,
         text_tokens: LongTensor,
         encoder_state: FloatTensor
     ) -> LongTensor:
+        image_count: int = 1
+
         expanded_indices = [0] * image_count + [1] * image_count
         text_tokens = text_tokens[expanded_indices]
         encoder_state = encoder_state[expanded_indices]
@@ -207,7 +237,7 @@ class DalleBartDecoder(nn.Module):
             self.embed_count
         )
         attention_state = torch.zeros(attention_state_shape)
-        if torch.cuda.is_available(): attention_state = attention_state.cuda()
+        # if torch.cuda.is_available(): attention_state = attention_state.cuda()
         
         image_tokens = self.start_token[[0] * image_count]
         image_tokens_sequence: List[LongTensor] = []
