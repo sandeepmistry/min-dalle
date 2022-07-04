@@ -60,7 +60,10 @@ class AttentionBase(nn.Module):
             keys
         )
         attention_weights += attention_bias[:, None, None, :]
-        attention_weights = torch.softmax(attention_weights, -1)
+        # attention_weights = torch.softmax(attention_weights, -1)
+        exp = torch.exp(attention_weights - torch.max(attention_weights, -1, keepdim=True).values)
+        attention_weights = exp / torch.sum(exp, -1, keepdim=True)
+
         attention_output: FloatTensor = torch.einsum(
             "bhqk,bkhc->bqhc",
             attention_weights, 
@@ -99,7 +102,7 @@ class EncoderLayer(nn.Module):
     ) -> FloatTensor:
         residual = encoder_state
         encoder_state = self.pre_self_attn_layer_norm.forward(encoder_state)
-        # encoder_state = self.self_attn.forward(encoder_state, attention_mask)
+        encoder_state = self.self_attn.forward(encoder_state, attention_mask)
         encoder_state = self.self_attn_layer_norm.forward(encoder_state)
         encoder_state = residual + encoder_state
         residual = encoder_state
