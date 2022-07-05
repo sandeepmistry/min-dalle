@@ -39,13 +39,13 @@ print(detokenizer)
 
 images = detokenizer.predict({
     'image_tokens': image_tokens
-})
+})['images']
 
-print(images['var_2596'][0].shape, images['var_2596'][0].dtype)
+print(images[0].shape, images[0].dtype)
 
 from PIL import Image
 import numpy as np
 
-image = Image.fromarray(images['var_2596'][0].astype(np.uint8))
+image = Image.fromarray(images[0].astype(np.uint8))
 
 image.save('generated_ct.png')

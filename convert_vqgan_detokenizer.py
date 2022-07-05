@@ -24,6 +24,9 @@ model = ct.convert(
     inputs=[
         ct.TensorType(name="image_tokens", shape=image_tokens.shape, dtype=np.int64)
     ],
+    outputs=[
+        ct.TensorType(name="images", dtype=np.float32),
+    ],
     convert_to="mlprogram",
     compute_precision=ct.precision.FLOAT32
 )
