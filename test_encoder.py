@@ -26,6 +26,6 @@ print(encoder)
 
 encoder_state = encoder.predict({
     'text_tokens': text_tokens
-})['encoder_state_57']
+})['encoder_state']
 
-print(encoder_state, encoder_state.dtype)
+print(encoder_state, encoder_state.shape, encoder_state.dtype)

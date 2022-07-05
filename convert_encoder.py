@@ -48,10 +48,16 @@ encoder.eval()
 
 scripted_model = torch.jit.script(encoder, example_inputs=[text_tokens])
 
+# traced_model = torch.jit.trace(encoder, text_tokens)
+# out = traced_model(text_tokens)
+
 model = ct.convert(
-    scripted_model,
+    scripted_model, # traced_model
     inputs=[
         ct.TensorType(name="text_tokens", shape=text_tokens.shape, dtype=np.int64),
+    ],
+    outputs=[
+        ct.TensorType(name="encoder_state", dtype=np.float32),
     ],
     convert_to="mlprogram",
     compute_precision=ct.precision.FLOAT32
