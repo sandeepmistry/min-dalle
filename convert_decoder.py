@@ -53,18 +53,18 @@ decoder.eval()
 
 scripted_model = torch.jit.script(decoder, example_inputs=[text_tokens, encoder_state])
 
-out = scripted_model(text_tokens, encoder_state)
-
 model = ct.convert(
     scripted_model,
     inputs=[
         ct.TensorType(name="text_tokens", shape=text_tokens.shape, dtype=np.int64),
         ct.TensorType(name="encoder_state", shape=encoder_state.shape, dtype=np.float32)
     ],
+    outputs=[
+        ct.TensorType(name="image_tokens", dtype=np.int64)
+    ],
     convert_to="mlprogram",
     compute_precision=ct.precision.FLOAT32
 )
 
 model.save('decoder.mlpackage')
-
 
