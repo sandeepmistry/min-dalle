@@ -36,12 +36,18 @@ text_tokens = torch.tensor([
 ], dtype=torch.int64)
 
 encoder_state = torch.zeros([2, 64, 1024], dtype=torch.float32)
+attention_state = torch.zeros([12, 4, 256, 1024], dtype=torch.float32)
+prev_tokens = torch.tensor([16384], dtype=torch.int64)
+token_index = torch.tensor([0], dtype=torch.int64)
 
 torch.manual_seed(1)
 
-image_tokens = decoder.forward(
+image_tokens, attention_state = decoder.forward(
     text_tokens, 
-    encoder_state
+    encoder_state,
+    attention_state,
+    prev_tokens,
+    token_index
 )
 
 print(image_tokens)
@@ -51,16 +57,31 @@ import numpy as np
 
 decoder.eval()
 
-scripted_model = torch.jit.script(decoder, example_inputs=[text_tokens, encoder_state])
+scripted_model = torch.jit.script(
+    decoder,
+    example_inputs=[
+        text_tokens,
+        encoder_state,
+        attention_state,
+        prev_tokens,
+        token_index
+    ]
+)
+
+print(scripted_model.code)
 
 model = ct.convert(
     scripted_model,
     inputs=[
         ct.TensorType(name="text_tokens", shape=text_tokens.shape, dtype=np.int64),
-        ct.TensorType(name="encoder_state", shape=encoder_state.shape, dtype=np.float32)
+        ct.TensorType(name="encoder_state", shape=encoder_state.shape, dtype=np.float32),
+        ct.TensorType(name="attention_state", shape=attention_state.shape, dtype=np.float32),
+        ct.TensorType(name="prev_tokens", shape=prev_tokens.shape, dtype=np.int64),
+        ct.TensorType(name="token_index", shape=token_index.shape, dtype=np.int64)
     ],
     outputs=[
-        ct.TensorType(name="image_tokens", dtype=np.int64)
+        ct.TensorType(name="image_tokens", dtype=np.int64),
+        ct.TensorType(name="attention_state_", dtype=np.float32)
     ],
     convert_to="mlprogram",
     compute_precision=ct.precision.FLOAT32

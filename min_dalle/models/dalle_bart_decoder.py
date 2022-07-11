@@ -76,7 +76,9 @@ class DecoderLayer(nn.Module):
         residual = decoder_state
         decoder_state = self.pre_self_attn_layer_norm.forward(decoder_state)
         self_attn_mask = self.token_indices < token_index + 1
+        self_attn_mask = self_attn_mask.to(torch.int32)
         self_attn_mask = self_attn_mask[None][[0] * decoder_state.shape[0]]
+        self_attn_mask = self_attn_mask.to(torch.bool)
         token_mask = self.token_indices == token_index
         decoder_state, attention_state = self.self_attn.forward(
             decoder_state,
@@ -175,11 +177,6 @@ class DalleBartDecoder(nn.Module):
         #     self.token_indices = self.token_indices.cuda()
         #     self.start_token = self.start_token.cuda()
 
-        self.noops: List[nn.Identity] = nn.ModuleList([
-            nn.Identity()
-            for _ in range(image_token_count)
-        ])
-
 
     def decode_step(
         self,
@@ -228,8 +225,11 @@ class DalleBartDecoder(nn.Module):
     def forward(
         self,
         text_tokens: LongTensor,
-        encoder_state: FloatTensor
-    ) -> LongTensor:
+        encoder_state: FloatTensor,
+        attention_state: FloatTensor,
+        prev_tokens: LongTensor,
+        token_index: LongTensor
+    ) -> Tuple[LongTensor, FloatTensor]:
         # image_count: int = 1
 
         expanded_indices = [0, 1] #[0] * image_count + [1] * image_count
@@ -237,33 +237,43 @@ class DalleBartDecoder(nn.Module):
         encoder_state = encoder_state[expanded_indices]
         attention_mask = text_tokens.not_equal(1)
 
-        attention_state_shape = (
-            12, #self.layer_count,
-            4,
-            256, #self.image_token_count,
-            1024 #self.embed_count
-        )
-        attention_state = torch.zeros((12, 4, 256, 1024), dtype=torch.float32)
+        # attention_state_shape = (
+        #     12, #self.layer_count,
+        #     4,
+        #     256, #self.image_token_count,
+        #     1024 #self.embed_count
+        # )
+        # attention_state = torch.zeros((12, 4, 256, 1024), dtype=torch.float32)
         # if torch.cuda.is_available(): attention_state = attention_state.cuda()
 
         # image_tokens = self.start_token[[0] * 1]
-        image_tokens_sequence = torch.full(
-            (1, 257), 
-            16384,
-            dtype=torch.int64
+        # image_tokens_sequence = torch.full(
+        #     (1, 257), 
+        #     16384,
+        #     dtype=torch.int64
+        # )
+
+        # for i, _ in enumerate(self.noops):
+        probs, attention_state = self.decode_step(
+            attention_mask = attention_mask,
+            encoder_state = encoder_state,
+            attention_state = attention_state,
+            prev_tokens = prev_tokens, #image_tokens_sequence.select(1, 0),
+            token_index = token_index
         )
 
-        for i, _ in enumerate(self.noops):
-            probs, attention_state = self.decode_step(
-                attention_mask = attention_mask,
-                encoder_state = encoder_state,
-                attention_state = attention_state,
-                prev_tokens = image_tokens_sequence.select(1, i),
-                token_index = self.token_indices[[i]]
-            )
+        image_tokens = torch.multinomial(probs, 1).select(1, 0)
 
-            image_tokens = torch.multinomial(probs, 1).select(1, 0)
+        # image_tokens_sequence[:, i + 1] = image_tokens
 
-            image_tokens_sequence[:, i + 1] = image_tokens
+        # probs, attention_state = self.decode_step(
+        #     attention_mask = attention_mask,
+        #     encoder_state = encoder_state,
+        #     attention_state = attention_state,
+        #     prev_tokens = prev_tokens,
+        #     token_index = token_index
+        # )
+
+        # image_tokens = torch.multinomial(probs, 1)[:,0] #.select(1, 0)
         
-        return image_tokens_sequence[:, 1:]
+        return image_tokens, attention_state

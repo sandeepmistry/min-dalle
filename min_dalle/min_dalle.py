@@ -169,11 +169,27 @@ class MinDalle:
         if not self.is_reusable: self.init_decoder()
         if self.is_verbose: print("sampling image tokens")
         if seed > 0: torch.manual_seed(seed)
-        image_tokens = self.decoder.forward(
-            # image_count,
-            text_tokens, 
-            encoder_state
-        )
+
+        image_token = torch.tensor([self.image_vocab_count], dtype=torch.int64)
+        attention_state = torch.zeros((12, 4, 256, 1024), dtype=torch.float32)
+        image_tokens = torch.zeros((1, self.image_token_count), dtype=torch.int64)
+        for i in range(self.image_token_count):
+            image_token, attention_state = self.decoder.forward(
+                text_tokens,
+                encoder_state,
+                attention_state,
+                image_token,
+                torch.tensor([i], dtype=torch.int64)
+            )
+
+            image_tokens[:, i] = image_token
+
+        # image_tokens = self.decoder.forward(
+        #     # image_count,
+        #     text_tokens, 
+        #     encoder_state
+        # )
+
         if not self.is_reusable: del self.decoder
         return image_tokens
         
